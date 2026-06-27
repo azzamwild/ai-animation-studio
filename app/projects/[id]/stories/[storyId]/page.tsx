@@ -27,7 +27,7 @@ import { useBackgrounds } from "@/hooks/useBackgrounds";
 import { useProps } from "@/hooks/useProps";
 import { useStoryboard } from "@/hooks/useStoryboard";
 
-import { generateDummyStoryboard } from "@/services/dummyStoryboardGenerator";
+import type { StoryboardScene } from "@/types/storyboard";
 
 export default function StoryDetailPage() {
   const params = useParams();
@@ -38,6 +38,7 @@ export default function StoryDetailPage() {
 
   const [showVoiceOver, setShowVoiceOver] = useState(false);
   const [showExportPackage, setShowExportPackage] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const { loaded: projectLoaded, getProjectById } = useProjects();
 
@@ -88,45 +89,70 @@ export default function StoryDetailPage() {
     }, 150);
   }
 
-  function generateStoryboardScenes() {
-    const generatedScenes = generateDummyStoryboard({
-      story: currentStory,
-      characters,
-      backgrounds,
-      availableProps: props,
-    });
+  async function generateStoryboardScenes() {
+    try {
+      setIsGenerating(true);
 
-    saveStoryboard(generatedScenes);
-    markStoryGenerated(storyId);
+      const response = await fetch("/api/ai/generate-storyboard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          projectTitle: currentProject.title,
+          story: currentStory,
+          characters,
+          backgrounds,
+          props,
+        }),
+      });
 
-    return generatedScenes;
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Gagal generate storyboard.");
+      }
+
+      const generatedScenes = data.scenes as StoryboardScene[];
+
+      saveStoryboard(generatedScenes);
+      markStoryGenerated(storyId);
+
+      return generatedScenes;
+    } catch (error) {
+      console.error(error);
+      alert("Gagal generate storyboard dengan Gemini. Cek terminal server.");
+      return [];
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
-  function handleGenerateStoryboard() {
-    generateStoryboardScenes();
+  async function handleGenerateStoryboard() {
+    await generateStoryboardScenes();
     scrollToElement("storyboard-panel");
   }
 
-  function handleScenePrompts() {
+  async function handleScenePrompts() {
     if (scenes.length === 0) {
-      generateStoryboardScenes();
+      await generateStoryboardScenes();
     }
 
     scrollToElement("storyboard-panel");
   }
 
-  function handleVoiceOver() {
+  async function handleVoiceOver() {
     if (scenes.length === 0) {
-      generateStoryboardScenes();
+      await generateStoryboardScenes();
     }
 
     setShowVoiceOver(true);
     scrollToElement("voice-over-panel");
   }
 
-  function handleExportPackage() {
+  async function handleExportPackage() {
     if (scenes.length === 0) {
-      generateStoryboardScenes();
+      await generateStoryboardScenes();
     }
 
     setShowVoiceOver(true);
@@ -271,14 +297,16 @@ export default function StoryDetailPage() {
 
             <div className="mt-6 grid grid-cols-4 gap-4">
               <Button
+                disabled={isGenerating}
                 onClick={handleGenerateStoryboard}
                 className="h-24 flex-col gap-2 bg-blue-600 hover:bg-blue-500"
               >
                 <Clapperboard size={24} />
-                Generate Storyboard
+                {isGenerating ? "Generating..." : "Generate Storyboard"}
               </Button>
 
               <Button
+                disabled={isGenerating}
                 onClick={handleScenePrompts}
                 className="h-24 flex-col gap-2 bg-zinc-800 hover:bg-zinc-700"
               >
@@ -287,6 +315,7 @@ export default function StoryDetailPage() {
               </Button>
 
               <Button
+                disabled={isGenerating}
                 onClick={handleVoiceOver}
                 className="h-24 flex-col gap-2 bg-zinc-800 hover:bg-zinc-700"
               >
@@ -295,6 +324,7 @@ export default function StoryDetailPage() {
               </Button>
 
               <Button
+                disabled={isGenerating}
                 onClick={handleExportPackage}
                 className="h-24 flex-col gap-2 bg-zinc-800 hover:bg-zinc-700"
               >

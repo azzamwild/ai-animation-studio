@@ -17,6 +17,7 @@ export default function StoriesPage() {
   const projectId = Number(params.id);
 
   const { loaded: projectLoaded, getProjectById } = useProjects();
+
   const {
     stories,
     loaded: storiesLoaded,
