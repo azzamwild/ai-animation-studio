@@ -26,8 +26,10 @@ import { useCharacters } from "@/hooks/useCharacters";
 import { useBackgrounds } from "@/hooks/useBackgrounds";
 import { useProps } from "@/hooks/useProps";
 import { useStoryboard } from "@/hooks/useStoryboard";
+import { useExportPackage } from "@/hooks/useExportPackage";
 
 import type { StoryboardScene } from "@/types/storyboard";
+import type { AnimationExportPackage } from "@/types/exportPackage";
 
 export default function StoryDetailPage() {
   const params = useParams();
@@ -38,7 +40,8 @@ export default function StoryDetailPage() {
 
   const [showVoiceOver, setShowVoiceOver] = useState(false);
   const [showExportPackage, setShowExportPackage] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false);
+  const [isGeneratingExport, setIsGeneratingExport] = useState(false);
 
   const { loaded: projectLoaded, getProjectById } = useProjects();
 
@@ -59,10 +62,24 @@ export default function StoryDetailPage() {
     clearStoryboard,
   } = useStoryboard(projectId, storyId);
 
+  const {
+    exportPackage,
+    loaded: exportPackageLoaded,
+    saveExportPackage,
+    clearExportPackage,
+  } = useExportPackage(projectId, storyId);
+
   const project = getProjectById(projectId);
   const story = getStoryById(storyId);
 
-  if (!projectLoaded || !storyLoaded || !storyboardLoaded) {
+  const isBusy = isGeneratingStoryboard || isGeneratingExport;
+
+  if (
+    !projectLoaded ||
+    !storyLoaded ||
+    !storyboardLoaded ||
+    !exportPackageLoaded
+  ) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
         Loading story...
@@ -91,7 +108,7 @@ export default function StoryDetailPage() {
 
   async function generateStoryboardScenes() {
     try {
-      setIsGenerating(true);
+      setIsGeneratingStoryboard(true);
 
       const response = await fetch("/api/ai/generate-storyboard", {
         method: "POST",
@@ -118,13 +135,53 @@ export default function StoryDetailPage() {
       saveStoryboard(generatedScenes);
       markStoryGenerated(storyId);
 
+      clearExportPackage();
+      setShowExportPackage(false);
+
       return generatedScenes;
     } catch (error) {
       console.error(error);
       alert("Gagal generate storyboard dengan Gemini. Cek terminal server.");
       return [];
     } finally {
-      setIsGenerating(false);
+      setIsGeneratingStoryboard(false);
+    }
+  }
+
+  async function generateAIExportPackage(sourceScenes: StoryboardScene[]) {
+    try {
+      setIsGeneratingExport(true);
+
+      const response = await fetch("/api/ai/generate-export-package", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          projectTitle: currentProject.title,
+          story: currentStory,
+          scenes: sourceScenes,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Gagal generate export package.");
+      }
+
+      const generatedExportPackage =
+        data.exportPackage as AnimationExportPackage;
+
+      saveExportPackage(generatedExportPackage);
+
+      return generatedExportPackage;
+    } catch (error) {
+      console.error(error);
+      alert("Gagal generate export package dengan Gemini. Cek terminal server.");
+      return null;
+    } finally {
+      setIsGeneratingExport(false);
     }
   }
 
@@ -151,8 +208,44 @@ export default function StoryDetailPage() {
   }
 
   async function handleExportPackage() {
-    if (scenes.length === 0) {
-      await generateStoryboardScenes();
+    let currentScenes = scenes;
+
+    if (currentScenes.length === 0) {
+      currentScenes = await generateStoryboardScenes();
+    }
+
+    if (currentScenes.length === 0) {
+      return;
+    }
+
+    if (!exportPackage) {
+      const generated = await generateAIExportPackage(currentScenes);
+
+      if (!generated) {
+        return;
+      }
+    }
+
+    setShowVoiceOver(true);
+    setShowExportPackage(true);
+    scrollToElement("export-package-panel");
+  }
+
+  async function handleRegenerateExportPackage() {
+    let currentScenes = scenes;
+
+    if (currentScenes.length === 0) {
+      currentScenes = await generateStoryboardScenes();
+    }
+
+    if (currentScenes.length === 0) {
+      return;
+    }
+
+    const generated = await generateAIExportPackage(currentScenes);
+
+    if (!generated) {
+      return;
     }
 
     setShowVoiceOver(true);
@@ -162,6 +255,8 @@ export default function StoryDetailPage() {
 
   function handleClearStoryboard() {
     clearStoryboard();
+    clearExportPackage();
+
     setShowVoiceOver(false);
     setShowExportPackage(false);
   }
@@ -202,9 +297,7 @@ export default function StoryDetailPage() {
 
           <div className="mt-10 grid grid-cols-3 gap-6">
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h3 className="text-sm text-zinc-500">
-                Category
-              </h3>
+              <h3 className="text-sm text-zinc-500">Category</h3>
 
               <p className="mt-2 text-lg font-semibold text-white">
                 {currentStory.category}
@@ -212,9 +305,7 @@ export default function StoryDetailPage() {
             </div>
 
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h3 className="text-sm text-zinc-500">
-                Platform
-              </h3>
+              <h3 className="text-sm text-zinc-500">Platform</h3>
 
               <p className="mt-2 text-lg font-semibold text-white">
                 {currentStory.targetPlatform}
@@ -222,9 +313,7 @@ export default function StoryDetailPage() {
             </div>
 
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
-              <h3 className="text-sm text-zinc-500">
-                Duration
-              </h3>
+              <h3 className="text-sm text-zinc-500">Duration</h3>
 
               <p className="mt-2 text-lg font-semibold text-white">
                 {currentStory.duration}
@@ -255,9 +344,7 @@ export default function StoryDetailPage() {
                   {characters.length}
                 </p>
 
-                <p className="text-zinc-400">
-                  Characters
-                </p>
+                <p className="text-zinc-400">Characters</p>
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
@@ -267,9 +354,7 @@ export default function StoryDetailPage() {
                   {backgrounds.length}
                 </p>
 
-                <p className="text-zinc-400">
-                  Backgrounds
-                </p>
+                <p className="text-zinc-400">Backgrounds</p>
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
@@ -279,9 +364,7 @@ export default function StoryDetailPage() {
                   {props.length}
                 </p>
 
-                <p className="text-zinc-400">
-                  Props
-                </p>
+                <p className="text-zinc-400">Props</p>
               </div>
             </div>
           </div>
@@ -297,16 +380,19 @@ export default function StoryDetailPage() {
 
             <div className="mt-6 grid grid-cols-4 gap-4">
               <Button
-                disabled={isGenerating}
+                disabled={isBusy}
                 onClick={handleGenerateStoryboard}
                 className="h-24 flex-col gap-2 bg-blue-600 hover:bg-blue-500"
               >
                 <Clapperboard size={24} />
-                {isGenerating ? "Generating..." : "Generate Storyboard"}
+
+                {isGeneratingStoryboard
+                  ? "Generating..."
+                  : "Generate Storyboard"}
               </Button>
 
               <Button
-                disabled={isGenerating}
+                disabled={isBusy}
                 onClick={handleScenePrompts}
                 className="h-24 flex-col gap-2 bg-zinc-800 hover:bg-zinc-700"
               >
@@ -315,7 +401,7 @@ export default function StoryDetailPage() {
               </Button>
 
               <Button
-                disabled={isGenerating}
+                disabled={isBusy}
                 onClick={handleVoiceOver}
                 className="h-24 flex-col gap-2 bg-zinc-800 hover:bg-zinc-700"
               >
@@ -324,14 +410,25 @@ export default function StoryDetailPage() {
               </Button>
 
               <Button
-                disabled={isGenerating}
+                disabled={isBusy}
                 onClick={handleExportPackage}
                 className="h-24 flex-col gap-2 bg-zinc-800 hover:bg-zinc-700"
               >
                 <PackageCheck size={24} />
-                Export Package
+
+                {isGeneratingExport ? "Generating..." : "Export Package"}
               </Button>
             </div>
+
+            {exportPackage && (
+              <button
+                disabled={isBusy}
+                onClick={handleRegenerateExportPackage}
+                className="mt-4 text-sm text-blue-400 hover:text-blue-300 disabled:opacity-50"
+              >
+                Regenerate AI Export Package
+              </button>
+            )}
           </div>
 
           <StoryboardPanel
@@ -343,10 +440,9 @@ export default function StoryDetailPage() {
             <VoiceOverPanel scenes={scenes} />
           )}
 
-          {showExportPackage && (
+          {showExportPackage && exportPackage && (
             <ExportPackagePanel
-              projectTitle={currentProject.title}
-              story={currentStory}
+              exportPackage={exportPackage}
               scenes={scenes}
             />
           )}
