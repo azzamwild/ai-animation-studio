@@ -33,6 +33,22 @@ export function useStoryboard(projectId: number, storyId: number) {
     setScenes(newScenes);
   }
 
+  function updateScene(
+    sceneId: number,
+    data: Partial<StoryboardScene>
+  ) {
+    setScenes((prev) =>
+      prev.map((scene) =>
+        scene.id === sceneId
+          ? {
+              ...scene,
+              ...data,
+            }
+          : scene
+      )
+    );
+  }
+
   function clearStoryboard() {
     setScenes([]);
   }
@@ -41,6 +57,7 @@ export function useStoryboard(projectId: number, storyId: number) {
     scenes,
     loaded,
     saveStoryboard,
+    updateScene,
     clearStoryboard,
   };
 }

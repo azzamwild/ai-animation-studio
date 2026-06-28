@@ -59,6 +59,7 @@ export default function StoryDetailPage() {
     scenes,
     loaded: storyboardLoaded,
     saveStoryboard,
+    updateScene,
     clearStoryboard,
   } = useStoryboard(projectId, storyId);
 
@@ -253,6 +254,16 @@ export default function StoryDetailPage() {
     scrollToElement("export-package-panel");
   }
 
+  function handleUpdateScene(
+  sceneId: number,
+  data: Partial<StoryboardScene>
+) {
+  updateScene(sceneId, data);
+
+  clearExportPackage();
+  setShowExportPackage(false);
+}
+
   function handleClearStoryboard() {
     clearStoryboard();
     clearExportPackage();
@@ -434,6 +445,7 @@ export default function StoryDetailPage() {
           <StoryboardPanel
             scenes={scenes}
             onClear={handleClearStoryboard}
+            onUpdateScene={handleUpdateScene}
           />
 
           {showVoiceOver && (
