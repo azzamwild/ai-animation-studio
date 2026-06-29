@@ -49,14 +49,14 @@ const modules = [
     description: "Break stories into scenes and shots.",
     icon: Clapperboard,
     path: "storyboard",
-    enabled: false,
+    enabled: true,
   },
   {
     name: "Export",
     description: "Export prompts for image and video tools.",
     icon: Download,
     path: "export",
-    enabled: false,
+    enabled: true,
   },
 ];
 
