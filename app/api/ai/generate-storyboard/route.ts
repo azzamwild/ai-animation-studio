@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
 
 import type { AnimationStory } from "@/types/story";
 import type { AnimationCharacter } from "@/types/character";
 import type { AnimationBackground } from "@/types/background";
 import type { AnimationProp } from "@/types/prop";
 import type { StoryboardScene } from "@/types/storyboard";
+
+import { generateJsonWithGeminiFallback } from "@/services/ai/geminiFallback";
 
 export const runtime = "nodejs";
 
@@ -26,42 +27,18 @@ const sceneSchema = {
       items: {
         type: "object",
         properties: {
-          sceneNumber: {
-            type: "integer",
-          },
-          duration: {
-            type: "string",
-          },
-          background: {
-            type: "string",
-          },
-          character: {
-            type: "string",
-          },
-          prop: {
-            type: "string",
-          },
-          cameraShot: {
-            type: "string",
-          },
-          cameraMovement: {
-            type: "string",
-          },
-          characterMovement: {
-            type: "string",
-          },
-          facialExpression: {
-            type: "string",
-          },
-          textOverlay: {
-            type: "string",
-          },
-          narration: {
-            type: "string",
-          },
-          videoPrompt: {
-            type: "string",
-          },
+          sceneNumber: { type: "integer" },
+          duration: { type: "string" },
+          background: { type: "string" },
+          character: { type: "string" },
+          prop: { type: "string" },
+          cameraShot: { type: "string" },
+          cameraMovement: { type: "string" },
+          characterMovement: { type: "string" },
+          facialExpression: { type: "string" },
+          textOverlay: { type: "string" },
+          narration: { type: "string" },
+          videoPrompt: { type: "string" },
         },
         required: [
           "sceneNumber",
@@ -87,17 +64,6 @@ const sceneSchema = {
 
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error: "GEMINI_API_KEY belum ada di .env.local",
-        },
-        { status: 500 }
-      );
-    }
-
     const body = (await request.json()) as RequestBody;
 
     const {
@@ -116,10 +82,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-
-    const ai = new GoogleGenAI({
-      apiKey,
-    });
 
     const characterList =
       characters.length > 0
@@ -200,53 +162,54 @@ Return JSON only.
 Do not add explanation.
 `;
 
-    const response = await ai.interactions.create({
-      model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
-      input: prompt,
-      response_format: {
-        type: "text",
-        mime_type: "application/json",
-        schema: sceneSchema,
-      },
-    });
-
-    const rawText = response.output_text || "";
-
-    const parsed = JSON.parse(rawText) as {
+    const result = await generateJsonWithGeminiFallback<{
       scenes: Omit<StoryboardScene, "id">[];
-    };
+    }>({
+      prompt,
+      schema: sceneSchema,
+      label: "Generate storyboard",
+    });
 
     const now = Date.now();
 
-    const scenes: StoryboardScene[] = parsed.scenes.map((scene, index) => {
-      return {
-        id: now + index,
-        sceneNumber: Number(scene.sceneNumber) || index + 1,
-        duration: scene.duration || "",
-        background: scene.background || "Default Background",
-        character: scene.character || "Main Character",
-        prop: scene.prop || "No Prop",
-        cameraShot: scene.cameraShot || "",
-        cameraMovement: scene.cameraMovement || "",
-        characterMovement: scene.characterMovement || "",
-        facialExpression: scene.facialExpression || "",
-        textOverlay: scene.textOverlay || "",
-        narration: scene.narration || "",
-        videoPrompt: scene.videoPrompt || "",
-      };
-    });
+    const scenes: StoryboardScene[] = result.data.scenes.map(
+      (scene: Omit<StoryboardScene, "id">, index: number) => {
+        return {
+          id: now + index,
+          sceneNumber: Number(scene.sceneNumber) || index + 1,
+          duration: scene.duration || "",
+          background: scene.background || "Default Background",
+          character: scene.character || "Main Character",
+          prop: scene.prop || "No Prop",
+          cameraShot: scene.cameraShot || "",
+          cameraMovement: scene.cameraMovement || "",
+          characterMovement: scene.characterMovement || "",
+          facialExpression: scene.facialExpression || "",
+          textOverlay: scene.textOverlay || "",
+          narration: scene.narration || "",
+          videoPrompt: scene.videoPrompt || "",
+        };
+      }
+    );
 
     return NextResponse.json({
       scenes,
+      provider: {
+        name: "gemini",
+        keyIndex: result.keyIndex,
+        model: result.model,
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini storyboard error:", error);
 
     return NextResponse.json(
       {
-        error: "Gagal generate storyboard dengan Gemini.",
+        error:
+          error?.message ||
+          "Gagal generate storyboard dengan Gemini.",
       },
-      { status: 500 }
+      { status: error?.statusCode || error?.status || 500 }
     );
   }
 }

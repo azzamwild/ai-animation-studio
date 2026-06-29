@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
 
 import type { AnimationStory } from "@/types/story";
 import type { StoryboardScene } from "@/types/storyboard";
 import type { AnimationExportPackage } from "@/types/exportPackage";
+
+import { generateJsonWithGeminiFallback } from "@/services/ai/geminiFallback";
 
 export const runtime = "nodejs";
 
@@ -55,17 +56,6 @@ const exportPackageSchema = {
 
 export async function POST(request: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error: "GEMINI_API_KEY belum ada di .env.local",
-        },
-        { status: 500 }
-      );
-    }
-
     const body = (await request.json()) as RequestBody;
 
     const { projectTitle, story, scenes = [] } = body;
@@ -136,26 +126,15 @@ RULES:
 - Do not add explanation.
 `;
 
-    const ai = new GoogleGenAI({
-      apiKey,
+    const result = await generateJsonWithGeminiFallback<
+      Omit<AnimationExportPackage, "createdAt">
+    >({
+      prompt,
+      schema: exportPackageSchema,
+      label: "Generate export package",
     });
 
-    const response = await ai.interactions.create({
-      model: process.env.GEMINI_MODEL || "gemini-3.5-flash",
-      input: prompt,
-      response_format: {
-        type: "text",
-        mime_type: "application/json",
-        schema: exportPackageSchema,
-      },
-    });
-
-    const rawText = response.output_text || "";
-
-    const parsed = JSON.parse(rawText) as Omit<
-      AnimationExportPackage,
-      "createdAt"
-    >;
+    const parsed = result.data;
 
     const exportPackage: AnimationExportPackage = {
       title: parsed.title || story.title,
@@ -170,15 +149,22 @@ RULES:
 
     return NextResponse.json({
       exportPackage,
+      provider: {
+        name: "gemini",
+        keyIndex: result.keyIndex,
+        model: result.model,
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini export package error:", error);
 
     return NextResponse.json(
       {
-        error: "Gagal generate export package dengan Gemini.",
+        error:
+          error?.message ||
+          "Gagal generate export package dengan Gemini.",
       },
-      { status: 500 }
+      { status: error?.statusCode || error?.status || 500 }
     );
   }
 }

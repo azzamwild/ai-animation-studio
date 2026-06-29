@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Pencil, Trash2 } from "lucide-react";
+import { Copy, Pencil, RefreshCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,8 @@ type StoryboardPanelProps = {
     sceneId: number,
     data: Partial<StoryboardScene>
   ) => void;
+  onRegenerateScene: (scene: StoryboardScene) => void | Promise<void>;
+  regeneratingSceneId: number | null;
 };
 
 type SceneForm = {
@@ -56,6 +58,8 @@ export default function StoryboardPanel({
   scenes,
   onClear,
   onUpdateScene,
+  onRegenerateScene,
+  regeneratingSceneId,
 }: StoryboardPanelProps) {
   const [copied, setCopied] = useState<string | null>(null);
   const [editingScene, setEditingScene] =
@@ -154,7 +158,7 @@ ${scene.videoPrompt}`;
             </h2>
 
             <p className="mt-2 text-zinc-400">
-              {scenes.length} scenes generated. You can edit each scene before export.
+              {scenes.length} scenes generated. You can edit or regenerate each scene.
             </p>
           </div>
 
@@ -178,93 +182,109 @@ ${scene.videoPrompt}`;
         </div>
 
         <div className="mt-6 space-y-6">
-          {scenes.map((scene) => (
-            <div
-              key={scene.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold text-white">
-                    Scene {scene.sceneNumber}
-                  </h3>
+          {scenes.map((scene) => {
+            const isRegenerating =
+              regeneratingSceneId === scene.id;
 
-                  <p className="mt-1 text-sm text-zinc-500">
-                    {scene.duration}
+            return (
+              <div
+                key={scene.id}
+                className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">
+                      Scene {scene.sceneNumber}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {scene.duration}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={() => openEdit(scene)}
+                      disabled={isRegenerating}
+                      className="bg-zinc-800 hover:bg-zinc-700"
+                    >
+                      <Pencil size={16} />
+                      Edit
+                    </Button>
+
+                    <Button
+                      onClick={() => onRegenerateScene(scene)}
+                      disabled={isRegenerating}
+                      className="bg-purple-600 hover:bg-purple-500"
+                    >
+                      <RefreshCcw size={16} />
+                      {isRegenerating ? "Regenerating..." : "Regenerate"}
+                    </Button>
+
+                    <Button
+                      onClick={() =>
+                        copyText(
+                          scene.videoPrompt,
+                          `scene-${scene.sceneNumber}`
+                        )
+                      }
+                      disabled={isRegenerating}
+                      className="bg-zinc-800 hover:bg-zinc-700"
+                    >
+                      <Copy size={16} />
+                      {copied === `scene-${scene.sceneNumber}`
+                        ? "Copied"
+                        : "Copy Prompt"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-3 gap-4 text-sm">
+                  <InfoItem label="Background" value={scene.background} />
+                  <InfoItem label="Character" value={scene.character} />
+                  <InfoItem label="Prop" value={scene.prop} />
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
+                  <InfoItem label="Camera Shot" value={scene.cameraShot} />
+                  <InfoItem
+                    label="Camera Movement"
+                    value={scene.cameraMovement}
+                  />
+                </div>
+
+                <SectionItem
+                  label="Character Movement"
+                  value={scene.characterMovement}
+                />
+
+                <SectionItem
+                  label="Facial Expression"
+                  value={scene.facialExpression}
+                />
+
+                <SectionItem
+                  label="Text Overlay"
+                  value={scene.textOverlay}
+                />
+
+                <SectionItem
+                  label="Narration"
+                  value={scene.narration}
+                />
+
+                <div className="mt-5">
+                  <p className="text-sm text-zinc-500">
+                    Video Prompt
+                  </p>
+
+                  <p className="mt-3 rounded-xl bg-zinc-900 p-4 text-sm leading-6 text-zinc-300">
+                    {scene.videoPrompt}
                   </p>
                 </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => openEdit(scene)}
-                    className="bg-zinc-800 hover:bg-zinc-700"
-                  >
-                    <Pencil size={16} />
-                    Edit
-                  </Button>
-
-                  <Button
-                    onClick={() =>
-                      copyText(
-                        scene.videoPrompt,
-                        `scene-${scene.sceneNumber}`
-                      )
-                    }
-                    className="bg-zinc-800 hover:bg-zinc-700"
-                  >
-                    <Copy size={16} />
-                    {copied === `scene-${scene.sceneNumber}`
-                      ? "Copied"
-                      : "Copy Prompt"}
-                  </Button>
-                </div>
               </div>
-
-              <div className="mt-5 grid grid-cols-3 gap-4 text-sm">
-                <InfoItem label="Background" value={scene.background} />
-                <InfoItem label="Character" value={scene.character} />
-                <InfoItem label="Prop" value={scene.prop} />
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
-                <InfoItem label="Camera Shot" value={scene.cameraShot} />
-                <InfoItem
-                  label="Camera Movement"
-                  value={scene.cameraMovement}
-                />
-              </div>
-
-              <SectionItem
-                label="Character Movement"
-                value={scene.characterMovement}
-              />
-
-              <SectionItem
-                label="Facial Expression"
-                value={scene.facialExpression}
-              />
-
-              <SectionItem
-                label="Text Overlay"
-                value={scene.textOverlay}
-              />
-
-              <SectionItem
-                label="Narration"
-                value={scene.narration}
-              />
-
-              <div className="mt-5">
-                <p className="text-sm text-zinc-500">
-                  Video Prompt
-                </p>
-
-                <p className="mt-3 rounded-xl bg-zinc-900 p-4 text-sm leading-6 text-zinc-300">
-                  {scene.videoPrompt}
-                </p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

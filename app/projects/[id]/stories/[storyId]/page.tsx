@@ -42,6 +42,8 @@ export default function StoryDetailPage() {
   const [showExportPackage, setShowExportPackage] = useState(false);
   const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false);
   const [isGeneratingExport, setIsGeneratingExport] = useState(false);
+  const [regeneratingSceneId, setRegeneratingSceneId] =
+    useState<number | null>(null);
 
   const { loaded: projectLoaded, getProjectById } = useProjects();
 
@@ -73,7 +75,10 @@ export default function StoryDetailPage() {
   const project = getProjectById(projectId);
   const story = getStoryById(storyId);
 
-  const isBusy = isGeneratingStoryboard || isGeneratingExport;
+  const isBusy =
+    isGeneratingStoryboard ||
+    isGeneratingExport ||
+    regeneratingSceneId !== null;
 
   if (
     !projectLoaded ||
@@ -186,6 +191,46 @@ export default function StoryDetailPage() {
     }
   }
 
+  async function handleRegenerateScene(scene: StoryboardScene) {
+    try {
+      setRegeneratingSceneId(scene.id);
+
+      const response = await fetch("/api/ai/regenerate-scene", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          projectTitle: currentProject.title,
+          story: currentStory,
+          currentScene: scene,
+          scenes,
+          characters,
+          backgrounds,
+          props,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Gagal regenerate scene.");
+      }
+
+      const regeneratedScene = data.scene as StoryboardScene;
+
+      updateScene(scene.id, regeneratedScene);
+
+      clearExportPackage();
+      setShowExportPackage(false);
+    } catch (error) {
+      console.error(error);
+      alert("Gagal regenerate scene dengan Gemini. Cek terminal server.");
+    } finally {
+      setRegeneratingSceneId(null);
+    }
+  }
+
   async function handleGenerateStoryboard() {
     await generateStoryboardScenes();
     scrollToElement("storyboard-panel");
@@ -255,14 +300,14 @@ export default function StoryDetailPage() {
   }
 
   function handleUpdateScene(
-  sceneId: number,
-  data: Partial<StoryboardScene>
-) {
-  updateScene(sceneId, data);
+    sceneId: number,
+    data: Partial<StoryboardScene>
+  ) {
+    updateScene(sceneId, data);
 
-  clearExportPackage();
-  setShowExportPackage(false);
-}
+    clearExportPackage();
+    setShowExportPackage(false);
+  }
 
   function handleClearStoryboard() {
     clearStoryboard();
@@ -446,6 +491,8 @@ export default function StoryDetailPage() {
             scenes={scenes}
             onClear={handleClearStoryboard}
             onUpdateScene={handleUpdateScene}
+            onRegenerateScene={handleRegenerateScene}
+            regeneratingSceneId={regeneratingSceneId}
           />
 
           {showVoiceOver && (
